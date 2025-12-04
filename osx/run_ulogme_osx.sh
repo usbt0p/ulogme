@@ -24,7 +24,7 @@ trap control_c SIGINT
 
 if [ "$DEV" = true ]; then
   # Directly invoke the python script
-  python osx/ulogme_osx.py \
+  python3 osx/ulogme_osx.py \
     --pid_file=$PID_FILE \
     --active_window_file=$ACTIVE_WINDOW_FILE \
     --keystroke_raw_file=$KEYSTROKE_RAW_FILE \
@@ -44,7 +44,7 @@ while true; do
   sleep 9
   touch $KEYSTROKE_RAW_FILE
   num=$(wc -l < $KEYSTROKE_RAW_FILE)
-  KEYSTROKE_FILE="$(pwd)/logs/keyfreq_$(python rewind7am.py).txt"
+  KEYSTROKE_FILE="$(pwd)/logs/keyfreq_$(python3 rewind7am.py).txt"
   echo "$(date +%s) $num"  >> $KEYSTROKE_FILE
   rm $KEYSTROKE_RAW_FILE
 done
