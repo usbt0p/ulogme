@@ -1,9 +1,6 @@
-import time
-import datetime
 import json
 import os
 import os.path
-import sys
 import glob
 
 
@@ -23,10 +20,10 @@ def loadEvents(fname):
       stamp = int(w[:ix])
       str = w[ix+1:]
       events.append({'t':stamp, 's':str})
-  except Exception, e:
-    print '%s probably does not exist, setting empty events list.' % (fname, )
-    print 'error was:'
-    print e
+  except Exception as e:
+    print('%s probably does not exist, setting empty events list.' % (fname, ))
+    print('error was:')
+    print(e)
     events = []
   return events
 
@@ -87,7 +84,7 @@ def updateEvents():
       e4mod = mtime(e4f)
       if e1mod > tmod or e2mod > tmod or e3mod > tmod or e4mod > tmod:
         dowrite = True # better update!
-        print 'a log file has changed, so will update %s' % (fwrite, )
+        print('a log file has changed, so will update %s' % (fwrite, ))
     else:
       # output file doesnt exist, so write.
       dowrite = True
@@ -105,11 +102,11 @@ def updateEvents():
 
       eout = {'window_events': e1, 'keyfreq_events': e2, 'notes_events': e3, 'blog': e4}
       open(fwrite, 'w').write(json.dumps(eout))
-      print 'wrote ' + fwrite
+      print('wrote ' + fwrite)
 
   fwrite = os.path.join(RENDER_ROOT, 'export_list.json')
   open(fwrite, 'w').write(json.dumps(out_list).encode('utf8'))
-  print 'wrote ' + fwrite
+  print('wrote ' + fwrite)
 
 # invoked as script
 if __name__ == '__main__':
