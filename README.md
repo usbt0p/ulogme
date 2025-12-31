@@ -1,6 +1,21 @@
 
 # ulogme
 
+> Updates:
+> Para referencia futura:
+
+    Muchas cosas porteadas de Python2 a Python3, librerias actuqalizadas, estilo de codigo adaptado.
+
+    Objetivo de funcionamiento en entorno: Ubuntu con Wayland.
+
+    Extensión GNOME: "Window Calls" (activada y funcionando en /org/gnome/Shell/Extensions/Windows) en vez de los comandos originales. 
+    Menos flexible pero funciona en wayland.
+
+    ulogme.sh: Se ejecuta como usuario normal. Lanza keyfreq con sudo y logactivewin sin sudo para evitar problemas de loggeo de ventanas para root.
+
+    logactivewin.sh: Llama a un script auxiliar de Python (get_window.py). Una especie de "capa de compatibilidad"
+
+    get_window.py: Usa gdbus para consultar la extensión y ast.literal_eval para parsear la respuesta sin errores.
 
 > ### How productive were you today? How much code have you written? Where did your time go?
 
@@ -24,6 +39,9 @@ See a blog post (along with multiple screenshots) describing the project [here.]
 
 1. Clone the repository to some folder: `$ git clone https://github.com/karpathy/ulogme.git`
 2. If you're on Ubuntu, make sure you have the dependencies: `$ sudo apt-get install xdotool wmctrl`. On Fedora, you may also need `sudo yum install gnome-screensaver`.
+
+TODO cambiar esto y avisar de la dependencia de python3 y de [la extension de Gnome window calls](https://github.com/ickyicky/window-calls) en ububntu.
+
 3. `cd` inside and run `$ ./ulogme.sh` (note: this will ask you for sudo authentication which is required for `showkey` command). This will launch two scripts. One records the frequency of keystrokes and the other records active window titles. Both write their logs into log files in the `logs/` directory. Every log file is very simply just the unix time stamp followed by data, one per line.
 4. For **OSX** only: there might be an additional step where you have to go to System Preferences > Security & Privacy > Accessibility, and make sure that Terminal (or iTerm2, or whatever you use to launch ulogme) is checked. If it wasn't checked previously and you just checked it, you may need to restart ulogme. If you don't do this step, you might find that window logging works but keypress logging doesn't.
 
