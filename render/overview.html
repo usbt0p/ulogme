@@ -10,10 +10,28 @@
     <script src="jquery-1.8.3.min.js"></script>
     <script src="spin.min.js"></script>
     <script src="render_utils.js"></script>
-    <script src="render_settings.js"></script>
+    <!-- load render_settings.js. Use ?dev=1 in URL to enable cache-busting during development -->
+    <script>
+      (function(){
+        var DEV_NO_CACHE = (window.location.search.indexOf('dev=1') > -1);
+        var s = document.createElement('script');
+        s.async = false; // preserve load order
+        s.src = 'render_settings.js' + (DEV_NO_CACHE ? ('?sigh=' + Math.floor(Date.now()/1000)) : '');
+        document.head.appendChild(s);
+      })();
+    </script>
     <script src="d3.min.js" charset="utf-8"></script>
     <script src="d3utils.js" charset="utf-8"></script>
-    <script src="underscore.min.js" charset="utf-8"></script>
+    <!-- load underscore optionally with cache-bust when ?dev=1 is present -->
+    <script>
+      (function(){
+        var DEV_NO_CACHE = (window.location.search.indexOf('dev=1') > -1);
+        var s = document.createElement('script');
+        s.async = false;
+        s.src = 'underscore.min.js' + (DEV_NO_CACHE ? ('?sigh=' + Math.floor(Date.now()/1000)) : '');
+        document.head.appendChild(s);
+      })();
+    </script>
     <script src="ulogme_common.js" charset="utf-8"></script>
     <script type="application/javascript">
 
@@ -212,10 +230,18 @@
       var max_kevents_global = 0;
       var sum_kevents_global = 0;
       for(var k=0;k<events.length;k++) {
-        var es = events[k]['keyfreq_events']; // window events for day k
-        
-        // get 7am time on this day
-        var d0 = new Date(es[0].t * 1000);
+        var es = events[k]['keyfreq_events']; // key events for day k (may be empty)
+        var we = events[k]['window_events']; // use window events to compute day start if keys missing
+        if(!we || we.length === 0) {
+          // nothing sensible to draw for this day
+          allkevents.push([]);
+          d0s.push(new Date(0));
+          ktots.push(0);
+          continue;
+        }
+
+        // get 7am time on this day based on window events
+        var d0 = new Date(we[0].t * 1000);
         d0.setHours(7);
         d0.setMinutes(0);
         d0.setSeconds(0);
@@ -230,22 +256,25 @@
           if(k===0) { kevents_global.push(0); }
         } 
 
-        // bucket up the events
+        // bucket up the events (if any)
         var ktot = 0;
-        for(var q=0,n=es.length;q<n;q++) {
-          var kw = es[q];
-          var binix = Math.floor((kw.t - t00)/time_bin);
-          var news = kevents[binix] + kw.s;
-          kevents[binix] = news;
-          var newg = kevents_global[binix] + kw.s;
-          if(news > maxs) { maxs = news; }
+        if(es && es.length > 0) {
+          for(var q=0,n=es.length;q<n;q++) {
+            var kw = es[q];
+            var binix = Math.floor((kw.t - t00)/time_bin);
+            if(binix < 0 || binix >= kevents.length) continue; // out-of-range defensive
+            var news = kevents[binix] + kw.s;
+            kevents[binix] = news;
+            var newg = kevents_global[binix] + kw.s;
+            if(news > maxs) { maxs = news; }
 
-          kevents_global[binix] = newg;
-          if(newg > max_kevents_global) { max_kevents_global = newg; }
-          sum_kevents_global += kw.s;
-          
-          ktot += kw.s;
+            kevents_global[binix] = newg;
+            if(newg > max_kevents_global) { max_kevents_global = newg; }
+            sum_kevents_global += kw.s;
+            ktot += kw.s;
+          }
         }
+
         allkevents.push(kevents);
         d0s.push(d0);
         ktots.push(ktot);
@@ -253,6 +282,10 @@
       }
 
       // draw global key events across all days as line
+      if(kevents_global.length === 0) {
+        d3.select('#keystats').append('p').text('No key frequency data available');
+        return;
+      }
       var sx = kevents_global.length;
       var bar_width = (W - wmargin) / sx;
       var div = d3.select("#keystats").append("div");
@@ -297,7 +330,7 @@
         var svg = div.append("svg")
         .attr("width", W)
         .attr("height", H);
-        var sx = kevents.length;
+        var sx = kevents.length || 1; // avoid division by zero for empty days
 
         svg.selectAll('.ke')
           .data(kevents)

@@ -2,7 +2,7 @@
 # ulogme
 
 > Updates:
-> Para referencia futura:
+> Para referencia futura, en el "backend":
 
     Muchas cosas porteadas de Python2 a Python3, librerias actuqalizadas, estilo de codigo adaptado.
 
@@ -17,7 +17,13 @@
 
     get_window.py: Usa gdbus para consultar la extensión y ast.literal_eval para parsear la respuesta sin errores.
 
-> ### How productive were you today? How much code have you written? Where did your time go?
+> En el front:
+
+    Añadir parametros de url para eliminar el cache y poder desarrollar bien.
+
+    Evitar problemas con NaN's en las pie charts, y con desaparicion de keyfreqs en las overviews.
+
+### How productive were you today? How much code have you written? Where did your time go?
 
 Keep track of your computer activity throughout the day: visualize your active window titles and the number of keystrokes in beautiful HTML timelines. Current features:
 
