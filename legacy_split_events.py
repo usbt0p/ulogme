@@ -1,103 +1,104 @@
-# convert old type events to new type events, in case you used legacy ulogme code
-# where all events were written to one file based on type. In new version these are
-# split also by date.
+from pathlib import Path
+from datetime import datetime, timedelta
+from collections import defaultdict
 
-import time
-import datetime
-import json
-import os
-import os.path
-import sys
+# Configuration
+ROOT = Path(__file__).parent.resolve()  # Get directory of this script
+LOGS_DIR = ROOT / 'logs'
+RENDER_DIR = ROOT / 'render'
 
-mint = -1
-maxt = -1
+def get_day_start_timestamp(ts: int) -> int:
+    """
+    Returns the unix timestamp of 7:00 AM for the day associated with the given timestamp.
+    If the time is before 7:00 AM, it counts as the previous day (ulogme logic).
+    """
+    dt = datetime.fromtimestamp(ts)
+    if dt.hour < 7:
+        dt = dt - timedelta(days=1)
+    
+    # Create new datetime at 7 AM of that day
+    day_start = datetime(dt.year, dt.month, dt.day, 7)
+    return int(day_start.timestamp())
 
-ROOT = ''
-RENDER_ROOT = os.path.join(ROOT, 'render')
+def parse_and_bucket_file(filepath: Path):
+    """
+    Reads a legacy ulogme file, parses lines, and groups them by their 
+    7AM split timestamp.
+    Returns: dict { day_timestamp: [ (event_ts, content_string) ] }
+    """
+    buckets = defaultdict(list)
+    
+    if not filepath.exists():
+        print(f"Warning: {filepath.name} not found. Skipping.")
+        return buckets
 
+    print(f"Processing {filepath.name}...")
+    
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if not line: continue
+                
+                # Split only once at the first space
+                parts = line.split(' ', 1)
+                if len(parts) < 2: continue
+                
+                try:
+                    ts = int(parts[0])
+                    content = parts[1]
+                    
+                    # Calculate which file this belongs to
+                    bucket_ts = get_day_start_timestamp(ts)
+                    buckets[bucket_ts].append((ts, content))
+                except ValueError:
+                    continue # Skip malformed lines
+    except Exception as e:
+        print(f"Error reading {filepath}: {e}")
 
-def loadEvents(fname):
-  """
-  Reads a file that consists of first column of unix timestamps
-  followed by arbitrary string, one per line. Outputs as dictionary.
-  Also keeps track of min and max time seen in global mint,maxt
-  """
-  global mint, maxt # not proud of this, okay?
-  events = []
+    return buckets
 
-  try:
-    ws = open(fname, 'r').read().splitlines()
-    events = []
-    for w in ws:
-      ix = w.find(' ') # find first space, that's where stamp ends
-      stamp = int(w[:ix])
-      str = w[ix+1:]
-      events.append({'t':stamp, 's':str})
-      if stamp < mint or mint==-1: mint = stamp
-      if stamp > maxt or maxt==-1: maxt = stamp
-  except Exception as e:
-    print('could not load %s. Setting empty events list.' % (fname, ))
-    print('(this is probably OKAY by the way, just letting you know)')
-    print(e)
-    events = []
-  return events
+def write_split_logs(buckets, prefix):
+    """
+    Writes the bucketed data into separate files.
+    """
+    if not buckets:
+        return
 
-# load all window events
-active_window_file = os.path.join(ROOT, 'logs/activewin.txt')
-print('loading windows events...')
-wevents = loadEvents(active_window_file)
+    # Ensure logs directory exists
+    LOGS_DIR.mkdir(exist_ok=True)
 
-# load all keypress events
-keyfreq_file = os.path.join(ROOT, 'logs/keyfreq.txt')
-print('loading key frequencies...')
-kevents = loadEvents(keyfreq_file)
-for k in kevents: # convert the key frequency to just be an int, not string
-  k['s'] = int(k['s'])
+    for bucket_ts, events in buckets.items():
+        # Sort events by time within the day (good practice)
+        events.sort(key=lambda x: x[0])
+        
+        filename = f"{prefix}_{bucket_ts}.txt"
+        out_path = LOGS_DIR / filename
+        
+        try:
+            with open(out_path, 'w', encoding='utf-8') as f:
+                for ts, content in events:
+                    f.write(f"{ts} {content}\n")
+            print(f"  -> Wrote {filename} ({len(events)} events)")
+        except Exception as e:
+            print(f"Error writing {filename}: {e}")
 
-print('loading notes...')
-notes_file = os.path.join(ROOT, 'logs/notes.txt')
-nevents = loadEvents(notes_file)
+def main():
+    print("--- Starting Legacy Event Converter ---")
 
-# rewind time to 7am on earliest data collection day
-dfirst = datetime.datetime.fromtimestamp(mint)
-dfirst = datetime.datetime(dfirst.year, dfirst.month, dfirst.day, 7) # set hour to 7am
-curtime = int(dfirst.strftime("%s"))
-out_list = []
-while curtime < maxt:
-  t0 = curtime
-  t1 = curtime + 60*60*24 # one day later
-  # this will break if there are leap seconds... sigh :D
+    # 1. Process Windows
+    win_buckets = parse_and_bucket_file(LOGS_DIR / 'activewin.txt')
+    write_split_logs(win_buckets, 'window')
 
-  # filter events
-  e1 = [x for x in wevents if x['t'] >= t0 and x['t'] < t1]
-  e2 = [x for x in kevents if x['t'] >= t0 and x['t'] < t1]
-  e3 = [x for x in nevents if x['t'] >= t0 and x['t'] < t1]
+    # 2. Process Keys
+    key_buckets = parse_and_bucket_file(LOGS_DIR / 'keyfreq.txt')
+    write_split_logs(key_buckets, 'keyfreq')
 
-  # sort by time just in case
-  e1.sort(key = lambda x: x['t'])
-  e2.sort(key = lambda x: x['t'])
-  e3.sort(key = lambda x: x['t'])
+    # 3. Process Notes
+    note_buckets = parse_and_bucket_file(LOGS_DIR / 'notes.txt')
+    write_split_logs(note_buckets, 'notes')
 
-  # write out log files split up
-  if e3:
-    fout = 'logs/notes_%d.txt' % (t0, )
-    f = open(fout, 'w')
-    f.write(''.join( ['%d %s\n' % (x['t'], x['s']) for x in e3] ))
-    f.close()
-    print('wrote ' + fout)
+    print("--- Conversion Complete ---")
 
-  if e2:
-    fout = 'logs/keyfreq_%d.txt' % (t0, )
-    f = open(fout, 'w')
-    f.write(''.join( ['%d %s\n' % (x['t'], x['s']) for x in e2] ))
-    f.close()
-    print('wrote ' + fout)
-
-  if e1:
-    fout = 'logs/window_%d.txt' % (t0, )
-    f = open(fout, 'w')
-    f.write(''.join( ['%d %s\n' % (x['t'], x['s']) for x in e1] ))
-    f.close()
-    print('wrote ' + fout)
-
-  curtime += 60*60*24
+if __name__ == "__main__":
+    main()

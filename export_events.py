@@ -1,113 +1,126 @@
 import json
-import os
-import os.path
-import glob
+from pathlib import Path
 
+# Paths
+ROOT = Path(__file__).parent.resolve()
+LOGS_DIR = ROOT / 'logs'
+RENDER_DIR = ROOT / 'render'
 
-def loadEvents(fname):
-  """
-  Reads a file that consists of first column of unix timestamps
-  followed by arbitrary string, one per line. Outputs as dictionary.
-  Also keeps track of min and max time seen in global mint,maxt
-  """
-  events = []
-
-  try:
-    ws = open(fname, 'r').read().decode('utf-8').splitlines()
+def load_events(filepath):
+    """
+    Reads a file with "timestamp string" lines. Returns list of dicts.
+    """
     events = []
-    for w in ws:
-      ix = w.find(' ') # find first space, that's where stamp ends
-      stamp = int(w[:ix])
-      str = w[ix+1:]
-      events.append({'t':stamp, 's':str})
-  except Exception as e:
-    print('%s probably does not exist, setting empty events list.' % (fname, ))
-    print('error was:')
-    print(e)
-    events = []
-  return events
+    if not filepath.exists():
+        return events
 
-def mtime(f):
-  """
-  return time file was last modified, or 0 if it doesnt exist
-  """
-  if os.path.isfile(f):
-    return int(os.path.getmtime(f))
-  else:
-    return 0
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            for line in f:
+                if not line.strip(): continue
+                # Split at first space only
+                parts = line.split(' ', 1)
+                if len(parts) < 2: continue
+                
+                events.append({
+                    't': int(parts[0]), 
+                    's': parts[1].strip()
+                })
+    except Exception as e:
+        print(f"Error reading {filepath.name}: {e}")
+        
+    return events
 
-def updateEvents():
-  """
-  goes down the list of .txt log files and writes all .json
-  files that can be used by the frontend
-  """
-  L = []
-  L.extend(glob.glob("logs/keyfreq_*.txt"))
-  L.extend(glob.glob("logs/window_*.txt"))
-  L.extend(glob.glob("logs/notes_*.txt"))
+def get_mtime(filepath):
+    """Returns modification time or 0 if missing."""
+    return int(filepath.stat().st_mtime) if filepath.exists() else 0
 
-  # extract all times. all log files of form {type}_{stamp}.txt
-  ts = [int(x[x.find('_')+1:x.find('.txt')]) for x in L]
-  ts = list(set(ts))
-  ts.sort()
+def update_events():
+    """
+    Scans log files, groups by day, and writes JSONs if source files changed.
+    """
+    # Ensure output dir exists
+    RENDER_DIR.mkdir(parents=True, exist_ok=True)
 
-  mint = min(ts)
-  maxt = max(ts)
+    # 1. Find all unique timestamps from filenames (e.g., window_12345.txt)
+    # We look at all relevant log files to build the master time list
+    all_files = list(LOGS_DIR.glob('*_*.txt'))
+    timestamps = set()
+    
+    for p in all_files:
+        if p.name.startswith(('keyfreq_', 'window_', 'notes_', 'blog_')):
+            try:
+                # Extract number between last underscore and .txt
+                ts_str = p.stem.split('_')[-1]
+                timestamps.add(int(ts_str))
+            except ValueError:
+                continue
 
-  # march from beginning to end, group events for each day and write json
-  ROOT = ''
-  RENDER_ROOT = os.path.join(ROOT, 'render')
-  os.system('mkdir -p ' + RENDER_ROOT) # make sure output directory exists
-  t = mint
-  out_list = []
-  for t in ts:
-    t0 = t
-    t1 = t0 + 60*60*24 # 24 hrs later
-    fout = 'events_%d.json' % (t0, )
-    out_list.append({'t0':t0, 't1':t1, 'fname': fout})
+    sorted_ts = sorted(list(timestamps))
+    out_list = []
 
-    fwrite = os.path.join(RENDER_ROOT, fout)
-    e1f = 'logs/window_%d.txt' % (t0, )
-    e2f = 'logs/keyfreq_%d.txt' % (t0, )
-    e3f = 'logs/notes_%d.txt' % (t0, )
-    e4f = 'logs/blog_%d.txt' % (t0, )
+    for t0 in sorted_ts:
+        t1 = t0 + 86400 # 24 hrs later
+        fname_out = f'events_{t0}.json'
+        out_list.append({'t0': t0, 't1': t1, 'fname': fname_out})
 
-    dowrite = False
+        # Define file paths
+        f_json = RENDER_DIR / fname_out
+        f_win = LOGS_DIR / f'window_{t0}.txt'
+        f_key = LOGS_DIR / f'keyfreq_{t0}.txt'
+        f_note = LOGS_DIR / f'notes_{t0}.txt'
+        f_blog = LOGS_DIR / f'blog_{t0}.txt'
 
-    # output file already exists?
-    # if the log files have not changed there is no need to regen
-    if os.path.isfile(fwrite):
-      tmod = mtime(fwrite)
-      e1mod = mtime(e1f)
-      e2mod = mtime(e2f)
-      e3mod = mtime(e3f)
-      e4mod = mtime(e4f)
-      if e1mod > tmod or e2mod > tmod or e3mod > tmod or e4mod > tmod:
-        dowrite = True # better update!
-        print('a log file has changed, so will update %s' % (fwrite, ))
-    else:
-      # output file doesnt exist, so write.
-      dowrite = True
+        # Check if we need to regenerate (Cache invalidation)
+        do_write = False
+        if not f_json.exists():
+            do_write = True
+        else:
+            t_json = get_mtime(f_json)
+            # If any source file is newer than the JSON, regenerate
+            if any(get_mtime(f) > t_json for f in [f_win, f_key, f_note, f_blog]):
+                print(f"Source changed, updating {fname_out}...")
+                do_write = True
 
-    if dowrite:
-      # okay lets do work
-      e1 = loadEvents(e1f)
-      e2 = loadEvents(e2f)
-      e3 = loadEvents(e3f)
-      for k in e2: k['s'] = int(k['s']) # int convert
+        if do_write:
+            # Load Data
+            e_win = load_events(f_win)
+            e_key = load_events(f_key)
+            e_note = load_events(f_note)
+            
+            # Convert keyfreq 's' to int
+            for k in e_key:
+                try:
+                    k['s'] = int(k['s'])
+                except ValueError: 
+                    k['s'] = 0
 
-      e4 = ''
-      if os.path.isfile(e4f):
-        e4 = open(e4f, 'r').read()
+            # Load Blog
+            blog_content = ""
+            if f_blog.exists():
+                try:
+                    with open(f_blog, 'r', encoding='utf-8') as f:
+                        blog_content = f.read()
+                except Exception as e:
+                    print(f"Error reading blog {t0}: {e}")
 
-      eout = {'window_events': e1, 'keyfreq_events': e2, 'notes_events': e3, 'blog': e4}
-      open(fwrite, 'w').write(json.dumps(eout))
-      print('wrote ' + fwrite)
+            # Dump JSON
+            data = {
+                'window_events': e_win,
+                'keyfreq_events': e_key,
+                'notes_events': e_note,
+                'blog': blog_content
+            }
+            
+            with open(f_json, 'w', encoding='utf-8') as f:
+                json.dump(data, f)
+            print(f"Wrote {f_json.name}")
 
-  fwrite = os.path.join(RENDER_ROOT, 'export_list.json')
-  open(fwrite, 'w').write(json.dumps(out_list).encode('utf8'))
-  print('wrote ' + fwrite)
+    # Write the master list
+    f_export = RENDER_DIR / 'export_list.json'
+    with open(f_export, 'w', encoding='utf-8') as f:
+        json.dump(out_list, f)
+    print(f"Wrote {f_export.name}")
 
-# invoked as script
 if __name__ == '__main__':
-  updateEvents()
+    update_events()

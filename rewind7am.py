@@ -2,7 +2,7 @@ import sys
 import datetime
 import time
 
-def rewindTime(t):
+def rewind_time(t):
   """
   very simply utility function that takes unix time (as int)
   and returns unix time at 7am of the day that the corresponding ulogme
@@ -24,6 +24,6 @@ def rewindTime(t):
 if __name__ == '__main__':
   if len(sys.argv) <= 1:
     # use right now
-    print(rewindTime(int(time.time())))
+    print(rewind_time(int(time.time())))
   else:
-    print(rewindTime(int(sys.argv[1])))
+    print(rewind_time(int(sys.argv[1])))
