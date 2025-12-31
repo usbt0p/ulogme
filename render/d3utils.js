@@ -41,6 +41,14 @@ var d3utils = {};
       .append("g")
       .attr("transform", "translate(" + w / 2 + "," + h / 2 + ")");
 
+    // if there's no positive data, skip drawing to avoid NaN transforms
+    var total = 0;
+    for(var i=0;i<chart_data.data.length;i++) { total += (Number(chart_data.data[i].val) || 0); }
+    if(total <= 0) {
+      div.append('p').attr('class', 'pienodata').text('No data to display');
+      return;
+    }
+
     var g = svg.selectAll(".arc")
       .data(pie(chart_data.data))
       .enter().append("g")
