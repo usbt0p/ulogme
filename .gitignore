@@ -3,6 +3,7 @@ render/events_*json
 logs
 *.swp
 *.pyc
+*.back
 old
 .DS_Store
 .python_pid

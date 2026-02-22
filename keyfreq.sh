@@ -6,19 +6,38 @@
 # recording day.
 
 LANG=en_US.utf8
-
 helperfile="logs/keyfreqraw.txt" # temporary helper file
-
+stopfile="logs/ulogme.stop"  # Definimos el archivo señal
 mkdir -p logs
+
+# Aseguramos que no existe señal vieja al arrancar
+rm -f $stopfile
 
 while true
 do
+
+  # 1. Comprobar si me han pedido parar ANTES de empezar el trabajo
+  if [ -f "$stopfile" ]; then
+      echo "Stop signal detected. Exiting..."
+      rm -f $stopfile  # Limpiamos
+      exit 0
+  fi
+
   showkey > $helperfile &
   PID=$!
   
-  # work in windows of 9 seconds 
-  sleep 9
-  kill $PID
+  # 2. Esperar 9 segundos (o salir antes si aparece el archivo)
+  # Usamos un bucle de espera para responder rápido al Ctrl+C
+  for i in {1..9}; do
+      sleep 1
+      if [ -f "$stopfile" ]; then
+          kill $PID 2>/dev/null
+          rm -f $stopfile
+          exit 0
+      fi
+  done
+
+  kill $PID 2>/dev/null
   
   # count number of key release events
   num=$(cat $helperfile | grep release | wc -l)
@@ -29,4 +48,3 @@ do
   echo "logged key frequency: $(date) $num release events detected into $logfile"
   
 done
-
