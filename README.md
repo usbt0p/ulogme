@@ -1,15 +1,23 @@
 
 # ulogme
 
-> Updates:
+Este es mi fork personal de [ulogme](https://github.com/karpathy/ulogme). Es un muy buen proyecto, pero al no estar mantenido desde 2016 era inutilizable en sistemas modernos (Ubuntu 24.04 con x11 + Python > 2 en mi caso). Más abajo tienes el [README original](#original-readme).
+
+He modernizado la parte de Python para funcionar con Python 3.12 (quizas más) y también los scripts de shell para gestionar logging de teclas y de ventanas, y he mejorado (o a mi me lo parece al menos) la interfaz de usuario. Eso si, la parte de OSX no la he tocado y no tengo pensado así que no creo que funcione.
+
+> [!NOTE]
+> Esto es un proyecto personal que en gran parte he vibecodeado, así que no esperes gran documentación, ni que funcione en todos los sistemas (estoy bastante seguro de que ahora mismo solo funciona en el mío correctamente). Además, el código no es de mucha calidad, concretamente el de JS, html y css, ya que no se programar en ninguno y lo vibecodeé a muerte.
+> Aún así, si quieres contribuir, no dudes en hacerlo y en escribirme o abrir un issue.
+
+## Updates con respecto al original
 > Para referencia futura, en el "backend":
 
-    Muchas cosas porteadas de Python2 a Python3, librerias actuqalizadas, estilo de codigo adaptado.
+    Muchas cosas porteadas de Python2 a Python3, librerias actualizadas, estilo de codigo adaptado.
 
-    Objetivo de funcionamiento en entorno: Ubuntu con Wayland.
+    Objetivo de funcionamiento en entorno: Ubuntu con X11.
 
     Extensión GNOME: "Window Calls" (activada y funcionando en /org/gnome/Shell/Extensions/Windows) en vez de los comandos originales. 
-    Menos flexible pero funciona en wayland.
+    Menos flexible pero funciona en X11. esta es la dependencia grande del proyecto.
 
     ulogme.sh: Se ejecuta como usuario normal. Lanza keyfreq con sudo y logactivewin sin sudo para evitar problemas de loggeo de ventanas para root.
 
@@ -17,11 +25,59 @@
 
     get_window.py: Usa gdbus para consultar la extensión y ast.literal_eval para parsear la respuesta sin errores.
 
+    ulogme.sh: sistema de cleanup para ctrl+c, autoinicio del servidor, centinel file para ctrl+c
+
+    keyfreq.sh: sistema de cleanup para ctrl+c, centinel file para ctrl+c, cambios en la logica de espera y del bucle para que funcione el centinel file
+
 > En el front:
 
     Añadir parametros de url para eliminar el cache y poder desarrollar bien.
 
     Evitar problemas con NaN's en las pie charts, y con desaparicion de keyfreqs en las overviews.
+
+    cuando no hay keyfreqs (suspension) no se plottean
+
+    revamped UI toda vibecodeada eso si
+
+> Automatizaciones:
+
+    Añadido el archivo .desktop junto con permisos en visudo para keyfreq.sh. Esto permite autostart del programa.
+
+	[Desktop Entry]
+	Type=Application
+	Name=Ulogme
+	Exec=/home/.../ulogme/ulogme.sh
+	Path=/home/.../ulogme
+	Terminal=false
+	X-GNOME-Autostart-enabled=true
+
+## TODOs
+
+- [ ] trabajando en escritorio remoto hay bugs (no se logean las teclas, se duplican los eventos???)
+- [ ] arreglar el blog, que no funciona
+- [ ] hacer que al iniciar el server o recargar se calcule el dia de hoy (ahora no funciona) y te lleve a el directamente
+- [x] mejorar el script de inicio: 
+	- [x] que no te pida la contraseña o al menos no al cerrar
+	- [x] que se pueda lanzar auto con el bashrc o cron, o un .desktop
+	- [x] que se pueda lanzar en background 
+- [ ] hacer que los ficherosn pasen a ser una base de datos rollo un sqlite. con ventanas mejores se podria hacer un filter y darselos a una llm
+- [ ] mejor obtencion de las ventanas: sacar nombre de aplicacion y subnombres de pestañas, etc. Mirar en el repo de newlogme
+- [ ] convertir los logs en una base de datos de series temporales simple, por un lado los textos y por otro los keyfreqs
+- [ ] permitir dormir el programa, o suspender sin que siga trackeando
+- [ ] permitir que pare de trackear si la pantalla se ha apagado (y vuelva a iniciar cuando se encienda)
+- [ ] FIX: algunos de los nombres de ventana son poco informativos: un subreddit no dice que es reddit, el navegador der archivos solo pone el nombre de la carpeta... encontrar un mejor sistema para los nombres de las ventanas, o en su defecto usar python??? 
+- [ ] Arreglar el problema de __LOCKSCREEN al usar alt+tab y super key (win key)
+- [ ] Arreglar el problema de unknown cuando se entra en suspension
+- [ ] Arreglar el problema de los NaN's en los pie charts
+- [x] FIX : al hacer hover sobre las actividades de la vista de un día, el texto de detalle se sale de la pantalla en las actividades muy a la derecha
+- [x] añadir un script para hacer que se inicie automáticamente ulogme y se sirva el servidor cada vez que se inicia el ordenador 
+- [ ] añadir un script para pararlo correctamente (al iniciar en background con .desktop `kill` simple no funciona)
+- [ ] hacer un sistema para añadir elementos sin categorizar (otros) a categorías (con gui??)
+- [ ] usar una extensión rollo activity wathch para loggear firefox con detalle o visual studio con detalle
+
+---
+
+# Original README
 
 ### How productive were you today? How much code have you written? Where did your time go?
 
