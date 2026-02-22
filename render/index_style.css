@@ -1,196 +1,177 @@
+:root {
+  --primary: #263238;
+  --accent: #5c6bc0;
+  --bg-body: #f4f7f6;
+  --bg-card: #ffffff;
+  --text: #37474f;
+  --text-muted: #90a4ae;
+  --border: #e0e0e0;
+  --radius: 12px;
+  --font: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
 body {
-  font-family: Impact, Charcoal, sans-serif;
-  color: #333;
-  font-size: 20px;
+  font-family: var(--font);
+  color: var(--text);
+  font-size: 14px;
+  background-color: var(--bg-body);
   margin: 0;
-  padding: 0;
+  padding-bottom: 60px;
 }
-g {
- font-size: 14px; 
- font-family: 'arial';
-}
-p {
-  margin: 0;
-  padding: 0;
-}
-.tt {
-  font-size: 30px;
-  margin-top: 30px;
-}
-.td {
-  font-size: 20px;
-}
-#wrap {
-  padding-left: 10px;
-  padding-right: 10px;
-}
-#piechart {
-  text-align: center;
-  margin-top: 40px;
-  padding-top: 20px;
-  margin-bottom: 20px;
-  border-top: 1px solid #AAA;
-}
-.line {
-  fill: none;
-  stroke: #55F;
-  stroke-width: 1px;
-}
-.al {
-  text-align: center;
-  color: #55F;
-}
-#keygraph {
-  margin-top: 20px;
-  border-top: 1px solid #AAA;
-}
-#keystats {
-  margin-top: 20px;
-}
-h2 {
-  text-align: center;
-  margin-bottom: 40px;
-  font-family: 'Lato', sans-serif;
-  font-weight: 300;
-  background-color: #FFA;
-  margin: 0;
-  padding: 20px;
-  box-shadow: 0px 0px 3px 0px #AAA;
-}
-h1 {
-  text-align: center;
-  color: #FFF;
-  font-size: 40px;
-  font-weight: normal;
-  background-color: #F55;
-  margin: 0;
-  padding: 20px;
-}
-#leftarrow {
-  float: left;
-}
-#rightarrow {
-  float: right;
-}
-.arrow {
-  font-size: 50px;
-  padding-top: 10px;
-  padding-bottom: 10px;
-  padding-left: 40px;
-  padding-right: 40px;
-  color: #662;
-  cursor: pointer;
-  /* make arrows unselectable, since they are text technically */
-  -webkit-user-select: none;  /* Chrome all / Safari all */
-  -moz-user-select: none;     /* Firefox all */
-  -ms-user-select: none;      /* IE 10+ */
-  -o-user-select: none; /* not yet supported well */
-  user-select: none;   
-}
-#notesinfo {
-  font-size: 16px;
-  font-family: 'arial';
-  background-color: #FFA;
-  border: 1px solid #EE9;
-  padding: 10px;
-  border-radius: 10px;
-  display: none;
-}
-#notesinfohide {
-  float: right;
-  font-size: 40px;
-  cursor: pointer;
-  /* make unselectable, since they are text technically */
-  -webkit-user-select: none;  /* Chrome all / Safari all */
-  -moz-user-select: none;     /* Firefox all */
-  -ms-user-select: none;      /* IE 10+ */
-  -o-user-select: none; /* not yet supported well */
-  user-select: none;   
-  color: #AA5;
-}
-#reloadbutton {
-  position: absolute;
-  color: white;
-  font-size: 60px;
-  right: 20px;
-  top: 0px;
-  cursor: pointer;
-}
-#notesadd {
-  font-weight: bold;
-  font-size: 20px;
-  border: 1px solid #333;
-  cursor: pointer;
-  text-align: center;
-  padding: 5px;
-  width: 100px;
-  background-color: #7E7;
-  border-radius: 5px;
-}
-input[type="text"] {
-    font-size: 20px;
-    margin-bottom: 5px;
-    display: block;
-    padding: 5px;
-    border: solid 1px #AA5;
-    width: 500px;
-    color: #333;
-}
-#spinnerdiv {
-  position: absolute;
-  left: 0;
+
+/* HEADER */
+header#main-header {
+  background-color: var(--primary);
+  height: 60px;
+  display: flex;
+  align-items: center;
+  padding: 0 30px;
+  position: sticky;
   top: 0;
-  width: 50px;
-  height: 50px;
+  z-index: 1000;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
 }
-#overviewlink {
-  position: absolute;
-  font-size: 30px;
-  top: 25px;
-  right: 100px;
-  font-weight: normal;
-  font-family: 'Lato', sans-serif;
+.header-content { width: 100%; max-width: 1400px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; }
+h1 { font-size: 18px; color: #fff; margin: 0; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+.header-actions { display: flex; gap: 20px; align-items: center; }
+.header-link a { color: #b0bec5; text-decoration: none; font-weight: 500; transition: 0.2s; }
+.header-link a:hover { color: #fff; }
+#reloadbutton { color: #b0bec5; font-size: 24px; cursor: pointer; transition: 0.2s; line-height: 1; }
+#reloadbutton:hover { color: #fff; transform: rotate(180deg); }
+
+/* FECHA */
+#date-controls {
+  background: #fff;
+  padding: 10px 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 25px;
 }
-#overviewlink a {
-  color: #FFF;
+#header h2 { font-size: 16px; margin: 0 20px; color: var(--text); font-weight: 600; border: none; background: none; box-shadow: none; padding: 0; }
+.arrow { cursor: pointer; background: #f5f5f5; color: var(--text); border: 1px solid #eee; border-radius: 6px; padding: 6px 15px; font-weight: bold; user-select: none; transition: 0.2s; }
+.arrow:hover { background: var(--accent); color: white; border-color: var(--accent); }
+
+/* LAYOUT */
+#wrap {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
-.fdiv {
-  display: inline-block;
-  margin-right: 50px;
+
+/* --- CONFIGURACIÓN DEL GRID Y COLUMNAS --- */
+/* --- LAYOUT: MÁS ESPACIO A LA DERECHA (PIE CHART) --- */
+.stats-row {
+  display: grid;
+  /* Damos 1.5 veces más espacio al gráfico de tarta que a las estadísticas */
+  grid-template-columns: 1.1fr 1fr; 
+  gap: 25px;
+  align-items: stretch;
 }
-pre {
-  background-color: #F9F9F9;
-  border: 1px solid #CCC;
-  padding: 10px;
-  border-radius: 3px;
-  font-size: 16px;
-}
-#blogenter textarea {
-  background-color: #F9F9F9;
-  border: 1px solid #CCC;
-  padding: 10px;
-  border-radius: 3px;
-  font-size: 16px;
-  height: 200px;
-  width: 100%;
-  margin: 0;
-  -webkit-box-sizing: border-box;
-  -moz-box-sizing: border-box;
-  box-sizing: border-box;
-}
-#blogenter {
-  margin-top: 10px;
-}
-#blogentersubmit {
-  width: 200px;
-  height: 40px;
-}
+
+/* --- ESTILO DE TEXTOS DEL PIE CHART --- */
 #piechart text {
-  font-family: Impact, Charcoal, sans-serif;
-  font-size: 20px;
+  font-size: 14px !important; /* Texto un poquito más grande */
+  fill: #2c2b2b !important;   /* Letra más oscura (casi negro) */
+  font-weight: 600;           /* Un poco más de grosor */
 }
-#keystats text {
-  font-family: Impact, Charcoal, sans-serif;
-  font-size: 20px;
-  fill: #333;
+
+
+/* --- RECUPERAR MÁRGENES Y ESPACIADO DE TARJETAS --- */
+.card-style, #keystats, #piechart, #keygraph, #eventvis, #hackingvis, #notesvis, #blogwrap {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 25px; 
+  box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+  border: 1px solid var(--border);
+  margin-bottom: 20px; /* Separación vertical entre tarjetas inferiores */
+  overflow: visible;   /* Permitir que los textos de la tarta sobresalgan del SVG si es necesario */
+}
+
+@media (max-width: 1100px) {
+  .stats-row { grid-template-columns: 1fr; }
+}
+
+.left-column {
+  display: flex;
+  flex-direction: column;
+  gap: 20px; /* Separa verticalmente Keystats y Blog */
+}
+
+
+/* Ajuste para que los gráficos ocupen el ancho disponible dentro del padding */
+svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+/* Responsivo */
+@media (max-width: 1200px) {
+  .stats-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Ajuste opcional para el Blog dentro de la columna */
+#blogwrap {
+  width: 100%;
+  margin: 0; /* Eliminamos márgenes legacy que puedan estorbar */
+}
+
+/* --- FIX BARRA BLANCA VACÍA --- */
+/* Si el div está vacío (sin hijos), ocúltalo. Magia CSS. */
+.card-style:empty, #hackingvis:empty, #notesvis:empty {
+  display: none !important;
+  padding: 0 !important;
+  border: none !important;
+}
+
+/* BLOG FIX */
+#blogpre {
+  background: #fafafa;
+  border: 1px dashed #ccc;
+  border-radius: 6px;
+  padding: 15px;
+  font-family: monospace;
+  color: #455a64;
+  white-space: pre-wrap;
+  margin: 0;
+  cursor: pointer;
+  min-height: 40px; /* Asegurar que se ve aunque esté vacío */
+}
+#blogpre:hover { border-color: var(--accent); background: #fff; }
+
+/* CATEGORÍAS */
+.fsdiv { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 15px; padding: 0 5px; }
+.fdiv { display: flex !important; align-items: center; margin: 0 !important; background: #fafafa; padding: 4px 12px; border-radius: 20px; border: 1px solid #eee; }
+.tt { font-size: 12px; font-weight: 700; margin-right: 6px; }
+.td { font-size: 12px; color: var(--text-muted); }
+
+/* NOTAS */
+#notesinfo { background: #fff; border-left: 4px solid var(--accent); border-radius: var(--radius); padding: 20px; position: relative; box-shadow: 0 4px 12px rgba(0,0,0,0.08); display: none; margin-bottom: 20px; }
+#notesmsg { font-weight: 600; margin-bottom: 15px; color: var(--primary); }
+input[type="text"], textarea { width: 100%; border: 2px solid #e0e0e0; border-radius: 8px; padding: 10px; font-family: var(--font); outline: none; transition: border-color 0.2s; background: #fff; }
+input[type="text"]:focus, textarea:focus { border-color: var(--accent); }
+button, #notesadd { background-color: var(--accent); color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 5px rgba(92, 107, 192, 0.3); }
+button:hover, #notesadd:hover { background-color: #3f51b5; transform: translateY(-1px); }
+#notesinfohide { position: absolute; top: 15px; right: 15px; width: 28px; height: 28px; background: #f5f5f5; border-radius: 50%; text-align: center; line-height: 28px; color: #ef5350; cursor: pointer; font-weight: bold; transition: 0.2s; }
+#notesinfohide:hover { background: #ffebee; color: #c62828; }
+
+/* SVG */
+.line { fill: none; stroke: var(--text-muted); stroke-width: 1px; opacity: 0.8; }
+text { font-family: var(--font) !important; fill: var(--text-muted); font-size: 11px; }
+#custom_tooltip { position: absolute; z-index: 9999; visibility: hidden; background: rgba(38, 50, 56, 0.95); color: white; padding: 8px 12px; border-radius: 6px; font-size: 12px; pointer-events: none; box-shadow: 0 4px 10px rgba(0,0,0,0.2); white-space: nowrap; }
+
+/* Asegura que si JS oculta el elemento, el padding de la tarjeta desaparezca también */
+.card-style[style*="display: none"] {
+    padding: 0 !important;
+    border: none !important;
+    margin: 0 !important;
 }

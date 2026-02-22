@@ -2,122 +2,176 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
     <title>ulogme</title>
-
-    <link href='font_lato.css' rel='stylesheet' type='text/css'>
     <link href='index_style.css' rel='stylesheet' type='text/css'>
 
     <script src="jquery-1.8.3.min.js"></script>
     <script src="spin.min.js"></script>
     <script src="render_utils.js"></script>
-    <!-- load render_settings.js. Use ?dev=1 in URL to enable cache-busting during development -->
     <script>
       (function(){
         var DEV_NO_CACHE = (window.location.search.indexOf('dev=1') > -1);
         var s = document.createElement('script');
-        s.async = false; // preserve load order
+        s.async = false;
         s.src = 'render_settings.js' + (DEV_NO_CACHE ? ('?sigh=' + Math.floor(Date.now()/1000)) : '');
         document.head.appendChild(s);
       })();
     </script>
     <script src="d3.min.js" charset="utf-8"></script>
     <script src="d3utils.js" charset="utf-8"></script>
-    <!-- load underscore optionally with cache-bust when ?dev=1 is present -->
-    <script>
-      (function(){
-        var DEV_NO_CACHE = (window.location.search.indexOf('dev=1') > -1);
-        var s = document.createElement('script');
-        s.async = false;
-        s.src = 'underscore.min.js' + (DEV_NO_CACHE ? ('?sigh=' + Math.floor(Date.now()/1000)) : '');
-        document.head.appendChild(s);
-      })();
-    </script>
+    <script src="underscore.min.js"></script>
     <script src="ulogme_common.js" charset="utf-8"></script>
     
     <script type="application/javascript">
-
     // GLOBALS
-    var color_hash = {}; // mapped titles -> hsl color to draw with
-    var t00; // initial time for a day (time first event began)
-    var ft; // final time for a day (time last event ended)
+    var color_hash = {}; 
+    var t00, ft; 
     var ecounts = {};
     var etypes = [];
     var hacking_stats = {};
+    var tooltip; // Global tooltip
 
-    // renders pie chart showing distribution of time spent into #piechart
+    // Paleta Pastel
+    var mpl_colors = ["#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#80b1d3", "#fdb462", "#b3de69", "#fccde5", "#d9d9d9", "#bc80bd"];
+
     function createPieChart(es, etypes) {
-
-      // count up the total amount of time spent in all windows
       var dtall = 0;
       var counts = {};
       _.each(es, function(e){ 
-        counts[e.m] = (counts[e.m] || 0) + e.dt; 
-        dtall += e.dt; 
+        counts[e.m] = (counts[e.m] || 0) + e.dt; dtall += e.dt; 
       });
+      
+      // 1. Mapeamos y FILTRAMOS los datos antes de calcular porcentajes
       var stats = _.map(etypes, function(m) {
-        return {val: counts[m], 
-                name: m + " (" + (100*counts[m]/dtall).toFixed(1) + "%)", 
-                col: color_hash[m]
-               };
+        return { val: counts[m] || 0, name: m, col: color_hash[m] };
       });
 
-      // create a pie chart with d3
+      // 2. Aquí eliminamos físicamente las porciones que no queremos
+      const protegidos = ["unknown", "Suspended", "System Panes"];
+      stats = _.filter(stats, function(d) {
+        return !protegidos.includes(d.name) > 0;
+      });
+
+      // 3. Calculamos el total basado SOLO en las categorías visibles
+      // Esto hace que el círculo siempre sume 100% con lo que sí se ve
+      var filtered_total = _.reduce(stats, function(memo, d){ return memo + d.val; }, 0);
+
+      // Mostramos etiquetas para todo lo que sea mayor al 0.5% y distinto de protegido
+      _.each(stats, function(d) {
+          d.percent = d.val / filtered_total;
+          if(d.percent < 0.005) { 
+            d.name = ""; 
+          } 
+          else { d.name = d.name + " (" + (100*d.percent).toFixed(1) + "%)"; }
+      });
+
       var chart_data = {};
-      chart_data.width = $(window).width();
-      chart_data.height = 500;
+      // Detectamos el nuevo ancho expandido del CSS
+      chart_data.width = $("#piechart").width() || 600; 
+      chart_data.height = 450; // Aumentamos altura para dar más margen vertical
+      
+      // Ajustamos el radio (r) para que sea un poco más pequeño respecto al total, 
+      // dejando más espacio en los laterales para los nombres largos.
+      chart_data.r = Math.min(chart_data.width * 0.7, chart_data.height) / 2 - 60; 
+      
       chart_data.title = "Total Time: " + strTimeDelta(dtall);
       chart_data.data = stats;
+      
+      $("#piechart").empty();
       d3utils.drawPieChart(d3.select('#piechart'), chart_data);
     }
 
-    // creates the main barcode time visualization for all mapped window titles
     function visualizeEvents(es) {
       $("#eventvis").empty();
       _.each(display_groups, function(x) { visualizeEvent(es, x); })
     }
 
-    // uses global variable hacking_events as input. Must be set
-    // and global total_hacking_time as well.
-    function visualizeHackingTimes(hacking_stats) {
-      $("#hackingvis").empty();
-      if(!draw_hacking) return; // global set in render_settings.js
+    function visualizeEvent(es, filter) {
+      var dts = [], ttot = 0, ttoti = [], filter_colors = [];
+      for(var q=0;q<filter.length;q++) { filter_colors[q] = color_hash[filter[q]]; ttoti.push(0); }
 
-      var c = "rgb(200,0,0)"; // color
+      for(var i=0,N=es.length;i<N;i++) {
+        var e = es[i];
+        var fix = filter.indexOf(e.m);
+        if( fix === -1) { continue; }
+        ttot += e.dt; ttoti[fix] += e.dt;
+        if(e.dt < 15) continue; // filtra la actividad mas pequeña que vamos a dibujar
+        dts.push({x: e.t - t00, w: e.dt, s: e.s + " (" + strTimeDelta(e.dt) + ")", fix: fix});
+      }
+      if(ttot < 60) return; 
 
-      var div = d3.select("#hackingvis").append("div");
-      div.append("p").attr("class", "tt").attr("style", "color:"+c).text("Hacking Streak");
-      var txt = strTimeDelta(hacking_stats.total_hacking_time);
-      txt += " (total keys = " + hacking_stats.total_hacking_keys + ")";
-      div.append("p").attr("class", "td").text(txt);
+      var div = d3.select("#eventvis").append("div");
+      var filters_div = div.append("div").attr("class", "fsdiv");
+      for(var q=0;q<filter.length;q++) {
+        if(ttoti[q] === 0) continue; 
+        var filter_div = filters_div.append("div").attr("class", "fdiv");
+        filter_div.append("p").attr("class", "tt").attr("style", "color:"+filter_colors[q]).text(filter[q]);
+        filter_div.append("p").attr("class", "td").text(strTimeDelta(ttoti[q]));
+      }
 
-      var W = $(window).width() - 40;
-      var svg = div.append("svg")
-      .attr("width", W)
-      .attr("height", 30);
+      // Seguridad: Si no hay tiempo transcurrido, no dibujamos para evitar división por cero
+      if (ft <= t00) return;
 
-      var sx = (ft-t00) / W;
-      var g = svg.selectAll(".h")
-        .data(hacking_stats.events)
-        .enter().append("g")
-        .attr("class", "h")
-        .on("mouseover", function(d){return tooltip.style("visibility", "visible").text(strTimeDelta(d.dt));})
-        .on("mousemove", function(){return tooltip.style("top", (event.pageY-10)+"px").style("left",(event.pageX+10)+"px");})
-        .on("mouseout", function(){return tooltip.style("visibility", "hidden");});
+      var W = $("#eventvis").width(); 
+      var svg = div.append("svg").attr("width", W).attr("height", 65); // Altura para números
+      var sx = (ft - t00) / W;
+
+      // --- DIBUJAR SEPARADORES Y NÚMEROS DE HORAS ---
+      var d0 = new Date(t00 * 1000);
+      d0.setMinutes(0); d0.setSeconds(0); d0.setMilliseconds(0);
+      var t = d0.getTime() / 1000; 
+
+      // Límite de seguridad para el bucle (máximo 24 iteraciones)
+      var safety = 0;
+      while(t < ft && safety < 30) {
+        var x_pos = (t - t00) / sx;
+        if(x_pos >= 0 && x_pos <= W) {
+            svg.append("line")
+               .attr("x1", x_pos).attr("x2", x_pos)
+               .attr("y1", 0).attr("y2", 50)
+               .attr("stroke", "rgba(0,0,0,0.06)");
+
+            svg.append("text")
+               .attr("transform", "translate(" + (x_pos + 4) + ", 62)")
+               .attr("fill", "#90a4ae")
+               .style("font-size", "10px")
+               .text(new Date(t * 1000).getHours());
+        }
+        t += 3600;
+        safety++;
+      }
+
+      var g = svg.selectAll(".e")
+        .data(dts).enter().append("g")
+        .attr("class", "e")
+        .on("mouseover", function(d){ return tooltip.style("visibility", "visible").text(d.s); })
+        .on("mousemove", function(){
+            // Corregido: Uso de d3.event para compatibilidad total
+            var mX = d3.event.pageX;
+            var winW = $(window).width();
+            // Si el ratón está en el último tercio de la pantalla, tooltip a la izquierda
+            var leftPos = (mX > winW - 250) ? (mX - 260) : (mX + 15);
+            return tooltip.style("top", (d3.event.pageY - 10) + "px").style("left", leftPos + "px");
+        })
+        .on("mouseout", function(){ return tooltip.style("visibility", "hidden"); })
+        .on("click", function(d){ 
+          $("#notesinfo").show(); 
+          $("#notesmsg").html("Add note for: <b>" + d.s + "</b>");
+          $("#notetext").focus(); 
+          clicktime = d.x + t00;
+        });
 
       g.append("rect")
-        .attr("x", function(d) { return (d.t0-t00)/sx; } )
-        .attr("width", function(d) { return d.dt/sx; } )
-        .attr("y", function(d) {return 30-10*d.intensity} )
-        .attr("height", function(d) {return 10*d.intensity; })
-        .attr("fill", function(d) { return c; });
+        .attr("x", function(d) { return d.x / sx; } )
+        .attr("width", function(d) { return Math.max(1, d.w / sx); } )
+        .attr("y", 0).attr("height", 50)
+        .attr("fill", function(d) { return filter_colors[d.fix]; });
     }
 
-    // number of keys pressed in every window type visualization
     function visualizeKeyStats(key_stats, etypes) {
       $("#keystats").empty();
 
-      // format input for d3
+      // 1. Preparar datos (Igual que tenías)
       var stats = _.map(etypes, function(m) { 
         return {
           name: m,
@@ -125,53 +179,116 @@
           col: color_hash[m],
         };
       });
-      stats = _.filter(stats, function(d) { return d.val > 60 }); // cutoff at 1 minute
+      
+      // Filtro de 60 keystrokes
+      stats = _.filter(stats, function(d) { return d.val > 60 }); 
+      
       _.each(stats, function(d) { 
         var fn = (d.val / (key_stats[d.name].n * 9.0)).toFixed(2); 
         d.text = d.val + ' (' + fn + '/s) ' + d.name;
       });
       stats = _.sortBy(stats, 'val').reverse();
 
-      // visualize as horizontal bars with d3
-      var chart_data = {};
-      chart_data.width = 700;
-      chart_data.barheight = 30;
-      chart_data.textpad = 300;
-      chart_data.textmargin = 10;
-      chart_data.title = "Total number of key strokes";
-      chart_data.data = stats;
-      d3utils.drawHorizontalBarChart(d3.select('#keystats'), chart_data);
+      // Si no hay datos, ocultar y salir
+      if(stats.length === 0) { $("#keystats").hide(); return; }
+      $("#keystats").show();
+
+      // 2. Configuración de Dimensiones
+      var div = d3.select("#keystats");
+      var width = $("#keystats").width() || 500; // Ancho responsivo
+      var barHeight = 30;
+      var gap = 2; // Espacio entre barras
+      
+      // Escala X para calcular el ancho de las barras
+      var maxVal = d3.max(stats, function(d) { return d.val; });
+      var x = d3.scale.linear().domain([0, maxVal]).range([0, width]);
+
+      // 3. Crear el SVG
+      var svg = div.append("svg")
+          .attr("width", width)
+          .attr("height", stats.length * (barHeight + gap));
+
+      // 4. Crear grupos para cada barra
+      var bar = svg.selectAll("g")
+          .data(stats)
+          .enter().append("g")
+          .attr("transform", function(d, i) { return "translate(0," + i * (barHeight + gap) + ")"; });
+
+      // 5. Dibujar RECTÁNGULO
+      bar.append("rect")
+          .attr("width", function(d) { return Math.max(2, x(d.val)); }) // Mínimo 2px para que se vea algo
+          .attr("height", barHeight)
+          .attr("fill", function(d) { return d.col; })
+          .attr("rx", 1) // Bordes ligeramente redondeados (opcional)
+          .attr("ry", 1);
+
+      // 6. Dibujar TEXTO (DENTRO)
+      bar.append("text")
+          .attr("x", 10) // Padding izquierdo (dentro de la barra)
+          .attr("y", barHeight / 2)
+          .attr("dy", ".35em") // Centrar verticalmente
+          .text(function(d) { return d.text; })
+          .attr("fill", "#000") // Color del texto (Oscuro para contrastar con pasteles)
+          // Si prefieres texto blanco: .attr("fill", "#fff").style("text-shadow", "0px 0px 2px rgba(0,0,0,0.5)")
+          .style("font-size", "13px")
+          .style("font-weight", "600")
+          .style("pointer-events", "none"); // El click atraviesa el texto hacia la barra
     }
 
-    // simple plot of key frequencies over time
-    function visualizeKeyFreq(es) {
-      $("#keygraph").empty();
+    // uses global variable hacking_events as input. Must be set
+    // and global total_hacking_time as well.
+    function visualizeHackingTimes(hacking_stats) {
+      $("#hackingvis").empty();
+      
+      // FIX 3: Comprobación estricta. Si no hay eventos o el total es 0 -> OCULTAR
+      if(!hacking_stats || !hacking_stats.events || hacking_stats.events.length === 0 || hacking_stats.total_hacking_keys === 0) { 
+         $("#hackingvis").hide(); 
+         return; 
+      }
+      $("#hackingvis").show();
 
-      var W = $(window).width() - 40;
+      var c = "#d32f2f"; 
+      var div = d3.select("#hackingvis").append("div");
+      div.append("p").attr("class", "tt").attr("style", "color:"+c).text("Hacking Streak");
+      var txt = strTimeDelta(hacking_stats.total_hacking_time);
+      txt += " (total keys = " + hacking_stats.total_hacking_keys + ")";
+      div.append("p").attr("class", "td").text(txt);
 
-      var div = d3.select("#keygraph").append("div");
-      var svg = div.append("svg")
-      .attr("width", "100%")
-      .attr("height", 100);
+      var W = $("#hackingvis").width() || 800; // Fallback width
+      var svg = div.append("svg").attr("width", W).attr("height", 30);
 
       var sx = (ft-t00) / W;
-      var line = d3.svg.line()
-        .x(function(d) { return (d.t -t00) / sx; })
-        .y(function(d) { return 100 - d.s; });
+      var g = svg.selectAll(".h")
+        .data(hacking_stats.events)
+        .enter().append("g")
+        .attr("class", "h")
+        .on("mouseover", function(d){return tooltip.style("visibility", "visible").text(strTimeDelta(d.dt));})
+        .on("mousemove", function(){
+            // Tooltip position logic
+             var mouseX = event.pageX;
+             var winW = $(window).width();
+             var leftPos = (mouseX > winW - 200) ? (mouseX - 200) : (mouseX + 15);
+             return tooltip.style("top", (event.pageY-10)+"px").style("left",leftPos+"px");
+        })
+        .on("mouseout", function(){return tooltip.style("visibility", "hidden");});
 
-      svg.append("path")
-        .datum(es)
-        .attr("class", "line")
-        .attr("d", line);
-
-      div.append("p").attr("class", "al").text("keystroke frequency");
+      g.append("rect")
+        .attr("x", function(d) { return (d.t0-t00)/sx; } )
+        .attr("width", function(d) { return Math.max(1, d.dt/sx); } )
+        .attr("y", function(d) {return 30-10*d.intensity} )
+        .attr("height", function(d) {return 10*d.intensity; })
+        .attr("fill", function(d) { return c; });
     }
+
 
     function visualizeNotes(es) {
       console.log('number of notes:' + es.length);
       $("#notesvis").empty();
-      if(!draw_notes) return; // draw_notes is set in render_settings.js
-      if(es.length === 0) return; // nothing to do here...
+        if(!es || es.length === 0) { $("#notesvis").hide(); return; }
+        $("#notesvis").show();
+      // $("#notesvis").empty();
+      // if(!draw_notes) return; // draw_notes is set in render_settings.js
+      // if(es.length === 0) return; // nothing to do here...
 
       var coffees = [];
       var dts= [];
@@ -247,360 +364,216 @@
         .text(function(d) { return d.s; } );
     }
 
-    var clicktime;
-    function visualizeEvent(es, filter) {
+    // // simple plot of key frequencies over time
+    // function visualizeKeyFreq(es) {
+    //   $("#keygraph").empty();
 
-      var dts = [];
-      var ttot = 0;
-      var ttoti = [];
-      var filter_colors = [];
-      for(var q=0;q<filter.length;q++) { 
-        filter_colors[q] = color_hash[filter[q]];
-        ttoti.push(0); 
+    //   var W = $(window).width() - 40;
+
+    //   var div = d3.select("#keygraph").append("div");
+    //   div.append("p").attr("class", "al").text("Keystroke frequency");
+    //   var svg = div.append("svg")
+    //   .attr("width", "100%")
+    //   .attr("height", 100);
+
+    //   var sx = (ft-t00) / W;
+    //   var line = d3.svg.line()
+    //     .x(function(d) { return (d.t -t00) / sx; })
+    //     .y(function(d) { return 100 - d.s; });
+
+    //   svg.append("path")
+    //     .datum(es)
+    //     .attr("class", "line")
+    //     .attr("d", line);
+    // }
+
+    // Gráfico de frecuencia de tecleo corregido y modernizado
+    // Versión con estilo original y lógica de suspensión corregida
+    function visualizeKeyFreq(es) {
+      $("#keygraph").empty();
+      
+      if(!es || es.length === 0) { 
+        $("#keygraph").hide(); 
+        return; 
       }
+      $("#keygraph").show();
 
-      for(var i=0,N=es.length;i<N;i++) {
-        var e = es[i];
-        var fix = filter.indexOf(e.m);
-        if( fix === -1) { continue; }
-        ttot += e.dt;
-        ttoti[fix] += e.dt;
-        if(e.dt < 10) continue; // less than few second event? skip drawing. Not a concentrated activity
-        var d = {};
-        d.x = e.t - t00;
-        d.w = e.dt;
-        d.s = e.s + " (" + strTimeDelta(e.dt) + ")";
-        d.fix = fix;
-        dts.push(d);
-      }
-      if(ttot < 60) return; // less than a minute of activity? skip
+      // FIX DESAPARICIÓN: Intentamos obtener el ancho del contenedor. 
+      // Si es 0 (por error de renderizado), usamos el de los eventos para forzar la sincronía.
+      var W = $("#keygraph").width();
+      if (W <= 0) W = $("#eventvis").width(); 
+      if (W <= 0) W = $(window).width() - 80; // Fallback final
 
-      console.log('drawing filter ' + filter + ' with ' + dts.length + ' events.');
-
-      var div = d3.select("#eventvis").append("div");
-
-      var filters_div = div.append("div").attr("class", "fsdiv");
-      for(var q=0;q<filter.length;q++) {
-        if(ttoti[q] === 0) continue; // this filter wasnt found
-
-        var filter_div = filters_div.append("div").attr("class", "fdiv");
-        var c = filter_colors[q];
-        filter_div.append("p").attr("class", "tt").attr("style", "color:"+c).text(filter[q]);
-        var txt = strTimeDelta(ttoti[q]);
-        filter_div.append("p").attr("class", "td").text(txt);
-      }
-
-      var W = $(window).width() - 40;
+      var H = 100;
+      var div = d3.select("#keygraph").append("div");
+      div.append("p").attr("class", "td").text("Keystroke frequency");
+      
       var svg = div.append("svg")
-      .attr("width", W)
-      .attr("height", 70);
+        .attr("width", W)
+        .attr("height", H);
 
-      var sx = (ft-t00) / W;
-      var g = svg.selectAll(".e")
-        .data(dts)
-        .enter().append("g")
-        .attr("class", "e")
-        .on("mouseover", function(d){return tooltip.style("visibility", "visible").text(d.s);})
-        .on("mousemove", function(){return tooltip.style("top", (event.pageY-10)+"px").style("left",(event.pageX+10)+"px");})
-        .on("mouseout", function(){return tooltip.style("visibility", "hidden");})
-        .on("click", function(d){ 
-          $("#notesinfo").show(); 
-          $("#notesmsg").html("clicked event <b>" + d.s + "</b><br> Add note at time of this event:");
-          $("#notetext").focus()
-          clicktime = d.x+t00;
-          return 0; 
-          });
+      // FIX SINCRONIZACIÓN: sx DEBE calcularse igual que en visualizeEvent
+      var sx = (ft - t00) / W;
 
-      g.append("rect")
-        .attr("x", function(d) { return d.x/sx; } )
-        .attr("width", function(d) { return d.w/sx; } )
-        .attr("y", 0)
-        .attr("height", 50)
-        .attr("fill", function(d) { return filter_colors[d.fix]; });
+      var line = d3.svg.line()
+        .defined(function(d, i) {
+          if (i === 0) return true;
+          // Si el salto es > 5 min, rompemos la línea (suspensión)
+          return (d.t - es[i-1].t) < 300; 
+        })
+        .x(function(d) { return (d.t - t00) / sx; })
+        .y(function(d) { return H - Math.min(d.s, H); }); // Evitar que se salga por arriba
 
-      // produce little axis numbers along the timeline
-      var d0 = new Date(t00 * 1000);
-      d0.setMinutes(0);
-      d0.setSeconds(0);
-      d0.setMilliseconds(0);
-      var t = d0.getTime() / 1000; // cropped hour
-      while(t < ft) {
-        svg.append("text")
-          .attr("transform", "translate(" + [(t-t00)/sx, 70] + ")")
-          .attr("font-family", "'Lato', sans-serif")
-          .attr("font-size", 14)
-          .attr("fill", "#CCC")
-          .text(new Date(t * 1000).getHours());
-        t += 3600;
-      }
+      svg.append("path")
+        .datum(es)
+        .attr("d", line)
+        .attr("fill", "none")    // CRUCIAL: Sin esto el path puede ser invisible
+        .attr("stroke", "#455a64") // Color gris oscuro
+        .attr("stroke-width", 1)
+        .style("opacity", 0.5);
     }
 
-    // count up how much every event took
-    function statEvents(es) {
-      if(es.length === 0) return;
-
-      var t0 = es[0].t;
-      var ixprev = 0;
-      for(var i=1,N=es.length;i<N;i++) {
-        var e = es[i];
-        var dt = es[i].t - es[ixprev].t; // length of time for last event
-        es[ixprev].dt = dt;
-        var tmap = es[ixprev].m; // mapped title of previous events
-        if(ecounts.hasOwnProperty(tmap)) {
-          ecounts[tmap] += dt;
-        } else {
-          ecounts[tmap] = 0;
-          etypes.push(tmap); // catalogue these in a list
-        }
-        ixprev = i;
-      }
-      es[N-1].dt = 1; // last event we dont know how long lasted. assume 1 second?
-    }
-
-    function writeHeader() {
-      var date0 = new Date(t00*1000);
-      var date1 = new Date(ft*1000);
-      $("#header").html('<h2>' + ppDate(date0) + ' - ' + ppDate(date1) + '</h2>');
-    }
-
-    function startSpinner() {
-      // create a spinner
-      var target = document.getElementById('spinnerdiv');
-      opts = {left:'30px', top:'40px', radius: 10, color: "#FFF" };
-      var spinner = new Spinner(opts).spin(target);
-    }
-    function stopSpinner() {
-      $("#spinnerdiv").empty();
-    }
-
+    // FETCH AND LOAD
     function fetchAndLoadEvents(daylog) {
-      loaded = false;
-      // we do this random thing to defeat caching. Very annoying
       var json_path = daylog.fname + "?sigh=" + Math.floor(10000*Math.random());
-
-      // fill in blog area with blog for this day
       $.getJSON(json_path, function(data){
-        loaded = true;
-
-        // save these as globals for later access
+        // ... (carga de datos events, key_events) ...
         events = data['window_events'];
-        key_events = data['keyfreq_events']
-        notes_events = data['notes_events']
+        key_events = data['keyfreq_events'];
+        notes_events = data['notes_events'];
 
-        // map all window titles through the (customizable) mapwin function
         _.each(events, function(e) { e.m = mapwin(e.s); });
         
-        // compute various statistics
+        // Colores
+        var unique_titles = _.uniq(_.pluck(events, 'm')).sort();
+        color_hash = {};
+        _.each(unique_titles, function(m, i) { color_hash[m] = mpl_colors[i % mpl_colors.length]; });
+
         statEvents(events);
-
-        // create color hash table, maps from window titles -> HSL color
-        color_hash = colorHashStrings(_.uniq(_.pluck(events, 'm')));
-
-        // find the time extent: min and max time for this day
         if(events.length > 0) {
           t00 = _.min(_.pluck(events, 't'));
           ft = _.max(_.map(events, function(e) { return e.t + e.dt; }))
+        } else { t00 = daylog.t0; ft = daylog.t1; }
+
+        //FIXME: Asegurar que se muestra algo aunque esté vacío para poder hacer click
+        var blogText = 'blog' in data ? data['blog'] : '';
+        if(!blogText || blogText.trim() === "") {
+             blogText = "Click here to add a log entry for this day...";
+             $("#blogpre").css('color', '#aaa').css('font-style', 'italic');
         } else {
-          t00 = daylog.t0;
-          ft = daylog.t1;
+             $("#blogpre").css('color', '#455a64').css('font-style', 'normal');
         }
+        $("#blogpre").text(blogText);
+        
+        // Render headers
+        $("#header").html('<h2>' + ppDate(new Date(t00*1000)) + '</h2>');
 
-        // render blog entry
-        blog = 'blog' in data ? data['blog'] : '';
-        if(blog === '') { blog = 'click to enter blog for this day'; }
-        $("#blogpre").text(blog);
-
+        // Visualizaciones
         visualizeEvents(events);
-        writeHeader();
         createPieChart(events, etypes);
-        computeKeyStats(events, key_events);
+        
+        var ks = computeKeyStats(events, key_events);
+        visualizeKeyStats(ks, etypes);
+        
         hacking_stats = computeHackingStats(events, key_events, hacking_titles);
         visualizeHackingTimes(hacking_stats);
-        key_stats = computeKeyStats(events, key_events);
-        visualizeKeyStats(key_stats, etypes);
+        
         visualizeKeyFreq(key_events);
         visualizeNotes(notes_events);
       });
     }
 
-    var events;
-    var key_events;
-    var notes_events;
-    var blog;
-    var tooltip;
-    var event_list = [];
-    var loaded = false;
-    var cur_event_id = -1;
-    var clicktime = 0;
+    // Funciones de utilidad básica (statEvents, writeHeader...) se mantienen igual.
+    function statEvents(es) {
+       if(es.length === 0) return;
+       var ixprev = 0;
+       for(var i=1;i<es.length;i++) {
+         es[ixprev].dt = es[i].t - es[ixprev].t;
+         var tmap = es[ixprev].m;
+         if(!ecounts[tmap]) { ecounts[tmap]=0; etypes.push(tmap); }
+         ecounts[tmap] += es[ixprev].dt;
+         ixprev = i;
+       }
+       es[es.length-1].dt = 1; 
+    }
+
+    var events, key_events, notes_events, event_list = [], cur_event_id = -1, clicktime = 0;
+
     function start() {
-      
-      // create tooltip div
-      tooltip = d3.select("body")
-      .append("div")
-      .style("position", "absolute")
-      .style("z-index", "10")
-      .style("visibility", "hidden")
-      .text("");
+      // Crear Tooltip Global
+      tooltip = d3.select("body").append("div").attr("id", "custom_tooltip");
 
-      // we do this random thing to defeat caching. Very annoying
-      $.getJSON("export_list.json?sigh=" + Math.floor(10000*Math.random()), function(data){
-        event_list = data; // assign to global variable
-
+      $.getJSON("export_list.json?sigh=" + Math.random(), function(data){
+        event_list = data; 
         cur_event_id = event_list.length - 1;
-        if('gotoday' in QueryString) { cur_event_id = parseInt(QueryString.gotoday); }
-
-        fetchAndLoadEvents(event_list[cur_event_id]); // display latest
+        if('gotoday' in QueryString) cur_event_id = parseInt(QueryString.gotoday); 
+        fetchAndLoadEvents(event_list[cur_event_id]); 
       });
 
-      // setup notes hide key
       $("#notesinfohide").click(function(){ $("#notesinfo").hide(); });
-
-      // setup refresh handler to create a post request to /reload
-      $("#reloadbutton").click(function() {
-
-        startSpinner();
-        $.post("/refresh",
-          {"time" : event_list[cur_event_id].t0},
-          function(data,status){
-            console.log("Data: " + data + "\nStatus: " + status);
-            stopSpinner();
-            if(data === 'OK') {
-              // everything went well, refresh current view
-              fetchAndLoadEvents(event_list[cur_event_id]);
-            }
-        });
+      $("#reloadbutton").click(function() { 
+          $.post("/refresh", {"time" : event_list[cur_event_id].t0}, function(d){ if(d==='OK') fetchAndLoadEvents(event_list[cur_event_id]); }); 
       });
-
-      // set up notes add handler
       $("#notesadd").click(function() {
-
-        startSpinner();
-        $.post("/addnote",
-          {"note": $("#notetext").val(), "time": clicktime},
-          function(data,status){
-            console.log("Data: " + data + "\nStatus: " + status);
-            stopSpinner();
-            if(data === 'OK') {
-              // everything went well, refresh current view
-              $("#notetext").val('') // erase
-              $("#notesinfo").hide(); // take away
-              fetchAndLoadEvents(event_list[cur_event_id]);
-            }
-        });
+          $.post("/addnote", {"note": $("#notetext").val(), "time": clicktime}, function(d){ if(d==='OK') { $("#notetext").val(''); $("#notesinfo").hide(); fetchAndLoadEvents(event_list[cur_event_id]); } });
       });
-
-      // register enter key in notes as submitting
-      $("#notetext").keyup(function(event){
-        if(event.keyCode == 13){
-          $("#notesadd").click();
-        }
-      });
-
-      // setup arrow events
-      $("#leftarrow").click(function() {
-        cur_event_id--;
-        if(cur_event_id < 0) {
-          cur_event_id = 0;
-        } else {
-          fetchAndLoadEvents(event_list[cur_event_id]); // display latest
-          $("#notesinfo").hide();
-          $("#blogenter").hide();
-          $("#blogpre").show();
-        }
-      });
-      $("#rightarrow").click(function() {
-        cur_event_id++;
-        if(cur_event_id >= event_list.length) {
-          cur_event_id = event_list.length - 1;
-        } else {
-          fetchAndLoadEvents(event_list[cur_event_id]); // display latest
-          $("#notesinfo").hide();
-          $("#blogenter").hide();
-          $("#blogpre").show();
-        }
-      });
-
-      // setup blog text click event
-      $("#blogenter").hide();
-      $("#blogpre").click(function(){
-        var txt = $("#blogpre").text();
-        $("#blogpre").hide();
-        $("#blogenter").show();
-        $("#blogentertxt").val(txt)
-        $("#blogentertxt").focus();
-      });
-
-      // setup the submit blog entry button
-      $("#blogentersubmit").click(function(){
-        var txt = $("#blogentertxt").val();
-        $("#blogpre").text(txt);
-        $("#blogpre").show();
-        $("#blogenter").hide();
-
-        // submit to server with POST request
-        $.post("/blog",
-          {"time" : event_list[cur_event_id].t0, "post": txt},
-           function(data,status){
-            console.log("Data: " + data + "\nStatus: " + status);
-            stopSpinner();
-            if(data === 'OK') {
-              // everything went well
-            }
-          });
-      });
-      setInterval(redraw, 1000); // in case of window resize, we can redraw
+      $("#leftarrow").click(function() { if(cur_event_id > 0) { cur_event_id--; fetchAndLoadEvents(event_list[cur_event_id]); } });
+      $("#rightarrow").click(function() { if(cur_event_id < event_list.length - 1) { cur_event_id++; fetchAndLoadEvents(event_list[cur_event_id]); } });
+      
+      $(window).resize(function() { fetchAndLoadEvents(event_list[cur_event_id]); }); // Redibujar simple al cambiar tamaño
     }
-
-    // redraw if dirty (due to window resize event)
-    function redraw() {
-      if(!dirty) return;
-      if(!loaded) return;
-      visualizeEvents(events);
-      visualizeKeyFreq(key_events);
-      visualizeNotes(notes_events);
-      visualizeHackingTimes(hacking_stats);
-      dirty = false;
-    }
-
-    var dirty = false;
-    $(window).resize(function() {
-      dirty = true;
-    });
-
     </script>
   </head>
   <body onload="start()">
-    <div id="spinnerdiv"></div>
-    <div id="reloadbutton">&#10226</div>
-    <div id="overviewlink"><a href="overview.html">Overview</a></div>
-    <h1>ulogme</h1>
-    <div>
-      <div id="leftarrow" class="arrow">&lt</div>
-      <div id="rightarrow" class="arrow">&gt</div>
+    
+    <header id="main-header">
+      <div class="header-content">
+        <h1>ULOGME</h1>
+        <div class="header-actions">
+          <div class="header-link"><a href="overview.html">Overview</a></div>
+          <div id="reloadbutton" title="Refresh">&#8635;</div>
+        </div>
+      </div>
+    </header>
+
+    <div id="date-controls">
+      <div id="leftarrow" class="arrow">&lt;</div>
       <div id="header"></div>
+      <div id="rightarrow" class="arrow">&gt;</div>
     </div>
+
     <div id="wrap">
-      <div id="blogwrap">
-        <pre id="blogpre"></pre>
-        <div id="blogenter">
-          <textarea id="blogentertxt"></textarea>
-          <button id="blogentersubmit">Submit</button>
+    <div class="stats-row">
+      
+      <div class="left-column">
+        <div id="keystats" class="card-style"></div>
+        
+        <div id="blogwrap" class="card-style"> 
+          <pre id="blogpre"></pre>
+          <div id="blogenter" style="display:none">
+            <textarea id="blogentertxt"></textarea>
+            <button id="blogentersubmit">Save Entry</button>
+          </div>
         </div>
       </div>
-      <div id="keystats"></div>
-      <div id="keygraph"></div>
-      <div id="notesinfo">
-        <div id="notesinfohide">X</div>
-        <div>
-          <div id="notesmsg"></div>
-          <input type="text" id="notetext">
-          <div id="notesadd">Add</div>
-        </div>
-      </div>
-      <div id="notesvis"></div>
-      <div id="hackingvis"></div>
-      <div id="eventvis"></div>
-      <div id="piechart"></div>
+
+      <div id="piechart" class="card-style"></div>
     </div>
+
+    <div id="keygraph" class="card-style"></div>
+    
+    <div id="notesinfo">
+      <div id="notesinfohide">x</div>
+      <div id="notesmsg"></div>
+      <div style="display:flex; align-items: center;">
+          <input type="text" id="notetext" placeholder="Type your note here...">
+          <div id="notesadd" style="margin-left: 10px;">Add Note</div>
+      </div>
+    </div>
+
+    <div id="notesvis" class="card-style"></div>
+    <div id="hackingvis" class="card-style"></div>
+    <div id="eventvis" class="card-style"></div>
+  </div>
   </body>
 </html>
