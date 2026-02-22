@@ -41,123 +41,151 @@
     function drawEvents() {
       $("#content").empty();
 
-      // draw the legend on top of the svg
+      // --- 1. DIBUJAR LEYENDA ---
       var d3div = d3.select("#content");
       var ldiv = d3div.append("div").attr('class', 'legenddiv');
 
       for(var i=0;i<etypes.length;i++) {
-        var pi = ldiv.append('p').text(etypes[i]).attr('style', 'color:' + color_hash[etypes[i]]);
-
         var m = etypes[i];
-        if(skipdraw[m]) { pi.attr('class', 'skipdrawyes'); }
-        else { pi.attr('class', 'skipdrawno'); }
-
-        pi.on('click', function(i) { // close over index i
+        var pi = ldiv.append('p').text(m).attr('style', 'color:' + color_hash[m]); // Color texto igual a la barra
+        if(skipdraw[m]) { 
+            pi.attr('class', 'skipdrawyes').style('background', '#eee').style('color', '#aaa'); 
+        } else { 
+            pi.attr('class', 'skipdrawno').style('background', 'white').style('border', '1px solid ' + color_hash[m]);
+        }
+        
+        pi.on('click', function(i) {
           return function() {
-            // toggle whether this one gets drawn
             var m = etypes[i];
-            if(skipdraw[m] === false) { skipdraw[m] = true; }
-            else { skipdraw[m] = false; }
-            drawEvents(); // and redraw the graph!
+            skipdraw[m] = !skipdraw[m];
+            drawEvents();
           }
         }(i));
       }
 
-      var margin = {top: 10, right: 10, bottom: 100, left: 40};
-      var fullwidth = 1200;
-      var fullheight = 800;
+      var margin = {top: 20, right: 30, bottom: 100, left: 50};
+      var fullwidth = $("#content").width(); // Ancho responsivo
+      var fullheight = 600; // Altura fija cómoda
       var width = fullwidth - margin.left - margin.right;
       var height = fullheight - margin.top - margin.bottom;
+      
       var svg = d3div.append("svg")
         .attr("width", width + margin.left + margin.right)
         .attr("height", height + margin.top + margin.bottom)
+        .append("g") // Usar grupo para márgenes
+        .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
 
-      var yscale = 0.008;
+      // --- 2. CÁLCULO DINÁMICO DEL EJE Y ---
+      // Encontrar el día con más segundos registrados (sumando solo categorías visibles)
+      var max_seconds = 0;
+      for(var k=0; k<edur.length; k++) {
+          var day_total = 0;
+          for(var key in edur[k]) {
+              if(!skipdraw[key]) { day_total += edur[k][key]; }
+          }
+          if(day_total > max_seconds) max_seconds = day_total;
+      }
 
-      // draw y axis labels
-      var yoff = 0;
+      // Si no hay datos, poner un default de 1 hora para evitar división por cero
+      if (max_seconds === 0) max_seconds = 3600;
+
+      // Redondear hacia arriba a la hora más cercana para el tope del eje
+      var max_hours = Math.ceil(max_seconds / 3600);
+      // Añadir un pequeño margen (e.g. 1 hora extra) para que no toque el techo
+      max_hours += 1; 
+
+      // Calcular la escala: pixels por segundo
+      var yscale_val = height / (max_hours * 3600);
+
+      // --- 3. DIBUJAR EJE Y Y LÍNEAS GUÍA ---
       var yn = 0;
-      while(yoff < height) {
-
-        var yy = (height + margin.top - yoff);
+      while(yn <= max_hours) {
+        var y_pos = height - (yn * 3600 * yscale_val);
+        
+        // Texto del eje
         svg.append("text")
-          .attr("transform", "translate(1," + (yy-3) + ")")
-          .text(yn + "hr");
+          .attr("x", -10)
+          .attr("y", y_pos + 4)
+          .attr("text-anchor", "end")
+          .text(yn + "h")
+          .attr("fill", "#999")
+          .style("font-size", "12px");
 
+        // Línea horizontal
         svg.append("line")
           .attr("x1", 0)
-          .attr("x2", width + margin.left)
-          .attr("y1", yy)
-          .attr("y2", yy)
-          .attr("stroke", "#EEE")
+          .attr("x2", width)
+          .attr("y1", y_pos)
+          .attr("y2", y_pos)
+          .attr("stroke", "#eee")
+          .attr("stroke-dasharray", "4,4") // Línea punteada sutil
           .attr("stroke-width", 1);
 
         yn++;
-        yoff += 3600 * yscale;
       }
 
-      // draw x axis labels
+      // --- 4. DIBUJAR EJE X Y BARRAS ---
       var N = edur.length;
-      var dsz = width / N;
+      var dsz = width / N; // Ancho de cada barra (día)
+
+      // Etiquetas eje X
       svg.selectAll('.xlabel')
         .data(event_list)
-      .enter()
+        .enter()
         .append("text")
         .attr("transform", function(d, i) {
-          var x = margin.left + i * dsz;
-          var y = height + margin.top + 3;
-          return "translate(" + x + "," + y + ")rotate(90)";})
-        .attr("fill", "#333")
-        .attr("font-family", "arial")
-        .attr("font-size", "14px")
-        .text(function(d) { var dobj = new Date(d.t0 * 1000); return ppDateShort(dobj); })
+          var x = i * dsz + (dsz/2);
+          var y = height + 15;
+          return "translate(" + x + "," + y + ")rotate(90)";
+        })
+        .attr("text-anchor", "start")
+        .attr("fill", "#666")
+        .style("font-size", "11px")
+        .text(function(d) { var dobj = new Date(d.t0 * 1000); return ppDateShort(dobj); });
 
-      // draw vertical lines at week boundaries for easier visual consumption
+      // Líneas verticales de semana (Lunes)
       svg.selectAll('.yd')
-        .data(event_list)
-      .enter()
-        .append("line")
+        .data(event_list).enter().append("line")
         .attr("stroke", function(d) { 
           var dobj = new Date(d.t0 * 1000); 
-          var isMonday = dobj.getDay() === 1;
-          return isMonday ? "#BBB" : "#EEE"
+          return dobj.getDay() === 1 ? "#ddd" : "none"; // Solo marcar lunes
         })
-        .attr('x1', function(d, i) { return margin.left + i * dsz; })
-        .attr('x2', function(d, i) { return margin.left + i * dsz; })
-        .attr('y1', height + margin.top)
-        .attr('y2', margin.top);
+        .attr('x1', function(d, i) { return i * dsz; })
+        .attr('x2', function(d, i) { return i * dsz; })
+        .attr('y1', height).attr('y2', 0);
 
-      // draw the data
+      // Dibujar las barras apiladas
       for(var k=0;k<N;k++) {
-        // convert from kv to list
         var dtimes = [];
         for(var i=0;i<etypes.length;i++) {
           var m = etypes[i];
-          if(skipdraw[m]) continue; // skip!
+          if(skipdraw[m]) continue; 
           dtimes.push({
             val: edur[k].hasOwnProperty(m) ? edur[k][m] : 0,
             col: color_hash[m]
           });
         }
 
-        svgg = svg.append('g')
-          .attr("style", "cursor:pointer;")
+        var svgg = svg.append('g')
+          .style("cursor", "pointer")
           .on("click", function(q){ 
-            return function(){
-              window.location.href = 'index.html?gotoday=' + q;
-            };
-          }(k)); // have to closure k
+            return function(){ window.location.href = 'index.html?gotoday=' + q; };
+          }(k));
 
-        var gh = 0;
+        var gh = 0; // Altura acumulada
         svgg.selectAll(".day"+k)
-          .data(dtimes)
-        .enter()
-          .append("rect")
-          .attr("width", dsz)
-          .attr("height", function(d) { return d.val * yscale; })
-          .attr("x", margin.left + k * dsz)
-          .attr("y", function(d) { gh += d.val; return height + margin.top - gh * yscale; })
-          .attr("fill", function(d) { return d.col; } );
+          .data(dtimes).enter().append("rect")
+          .attr("width", dsz - 1) // -1 para dejar un huequito blanco entre días
+          .attr("x", k * dsz)
+          .attr("height", function(d) { return d.val * yscale_val; })
+          .attr("y", function(d) { 
+             gh += d.val; 
+             return height - (gh * yscale_val); 
+          })
+          .attr("fill", function(d) { return d.col; })
+          .attr("opacity", 0.9)
+          .on("mouseover", function() { d3.select(this).attr("opacity", 1); })
+          .on("mouseout", function() { d3.select(this).attr("opacity", 0.9); });
       }
     }
 
